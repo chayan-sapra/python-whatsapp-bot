@@ -33,12 +33,12 @@ def generate_response(response):
 def send_message(data):
     headers = {
         "Content-type": "application/json",
-        "Authorization": f"Bearer {current_app.config['ACCESS_TOKEN']}",
+        "Authorization": f"Bearer {current_app.config['ACCESS_TOKEN']}"
     }
-
     url = f"https://graph.facebook.com/{current_app.config['VERSION']}/{current_app.config['PHONE_NUMBER_ID']}/messages"
 
     try:
+        # response = requests.request("POST", url, headers=headers, data=data)
         response = requests.post(
             url, data=data, headers=headers, timeout=10
         )  # 10 seconds timeout as an example
