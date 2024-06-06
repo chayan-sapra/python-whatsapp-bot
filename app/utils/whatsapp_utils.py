@@ -89,7 +89,9 @@ def process_whatsapp_message(body):
     # response = generate_response(message_body, wa_id, name)
     # response = process_text_for_whatsapp(response)
 
-    data = get_text_message_input(current_app.config["RECIPIENT_WAID"], response)
+    # data = get_text_message_input(current_app.config["RECIPIENT_WAID"], response)
+    data = get_button_message_input(current_app.config["RECIPIENT_WAID"])
+    print(f"data = {data}")
     send_message(data)
 
 
@@ -105,3 +107,36 @@ def is_valid_whatsapp_message(body):
         and body["entry"][0]["changes"][0]["value"].get("messages")
         and body["entry"][0]["changes"][0]["value"]["messages"][0]
     )
+
+def get_button_message_input(recipient):
+    return json.dumps({
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": recipient,
+    "type": "interactive",
+    "interactive": {
+        "type": "button",
+        "body": {
+            "text": "Choose an option"
+        },
+        "action": {
+            "buttons": [
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "button1",
+                        "title": "Option 1"
+                    }
+                },
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "button2",
+                        "title": "Option 2"
+                    }
+                }
+            ]
+        }
+    }
+
+    })
