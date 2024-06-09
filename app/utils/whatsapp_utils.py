@@ -6,6 +6,8 @@ import requests
 # from app.services.openai_service import generate_response
 import re
 
+from app.utils.constants import AppointmentConstants
+
 
 def log_http_response(response):
     logging.info(f"Status: {response.status_code}")
@@ -110,33 +112,89 @@ def is_valid_whatsapp_message(body):
 
 def get_button_message_input(recipient):
     return json.dumps({
-    "messaging_product": "whatsapp",
-    "recipient_type": "individual",
-    "to": recipient,
-    "type": "interactive",
-    "interactive": {
-        "type": "button",
-        "body": {
-            "text": "Choose an option"
-        },
-        "action": {
-            "buttons": [
-                {
-                    "type": "reply",
-                    "reply": {
-                        "id": "button1",
-                        "title": "Option 1"
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": recipient,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "header": {
+                "type": "text",
+                "text": "Book an Appointment"
+            },
+            "body": {
+                "text": "Please select an option below to book your appointment:"
+            },
+            "footer": {
+                "text": "Powered by A+ Solutions"
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": AppointmentConstants.ID,
+                            "title": "Book Appointment"
+                        }
                     }
-                },
-                {
-                    "type": "reply",
-                    "reply": {
-                        "id": "button2",
-                        "title": "Option 2"
-                    }
-                }
-            ]
+                ]
+            }
         }
-    }
+    })
 
+def get_appointment_details_message(recipient):
+    return json.dumps({
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": recipient,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "header": {
+                "type": "text",
+                "text": "Appointment Booking"
+            },
+            "body": {
+                "text": "Please provide the following details to book your appointment:"
+            },
+            "footer": {
+                "text": "Powered by A+ Solutions"
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "provide_name",
+                            "title": "Provide Name"
+                        }
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "provide_date",
+                            "title": "Provide Date"
+                        }
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "provide_time",
+                            "title": "Provide Time"
+                        }
+                    }
+                ]
+            }
+        }
+    })    
+
+def send_ask_name_message(recipient):
+    return json.dumps({
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": recipient,
+        "type": "text",
+        "text": {
+            "body": "Please provide your full name for the appointment booking."
+        }
     })

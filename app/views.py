@@ -1,16 +1,109 @@
 import logging
 import json
 import requests
-import re
 from flask import Blueprint, request, jsonify, current_app
 
 from .decorators.security import signature_required
 from .utils.whatsapp_utils import (
     process_whatsapp_message,
     is_valid_whatsapp_message,
-)
+    send_message
+    )
+from .utils.constants import *
 
 webhook_blueprint = Blueprint("webhook", __name__)
+
+class AppointmentBookingBot:
+    def __init__(self):
+        self.user_states = {}
+
+    def initialize_user(self, mobile_number):
+        self.user_states[mobile_number] = {
+            "step": 0,
+            "details": {
+                "name": None,
+                "date": None,
+                "time": None,
+            }
+        }
+
+    def get_next_message(self, mobile_number, response=None):
+        if mobile_number not in self.user_states:
+            self.initialize_user(mobile_number)
+
+        user_state = self.user_states[mobile_number]
+        step = user_state["step"]
+        details = user_state["details"]
+
+        if step == 0:
+            user_state["step"] += 1
+            return self.send_ask_name_message(mobile_number)
+        elif step == 1:
+            details["name"] = response
+            user_state["step"] += 1
+            return self.send_ask_date_message(mobile_number)
+        elif step == 2:
+            details["date"] = response
+            user_state["step"] += 1
+            return self.send_ask_time_message(mobile_number)
+        elif step == 3:
+            details["time"] = response
+            user_state["step"] += 1
+            return self.confirm_appointment(mobile_number, details)
+        else:
+            return self.confirm_appointment(mobile_number, details)
+
+
+    def send_ask_name_message(self, mobile_number):
+        return json.dumps({
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": mobile_number,
+            "type": "text",
+            "text": {
+                "body": "Please provide your full name for the appointment booking."
+            }
+        })
+
+    def send_ask_date_message(self, mobile_number):
+        return json.dumps({
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": mobile_number,
+            "type": "text",
+            "text": {
+                "body": "Please provide your preferred date for the appointment (e.g., 2024-06-15)."
+            }
+        })
+
+    def send_ask_time_message(self, mobile_number):
+        return json.dumps({
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": mobile_number,
+            "type": "text",
+            "text": {
+                "body": "Please provide your preferred time for the appointment (e.g., 10:00 AM)."
+            }
+        })
+
+    def confirm_appointment(self, mobile_number, details):
+        confirmation_message = (
+            f"Thank you, {details['name']}! "
+            f"Your appointment is scheduled for {details['date']} at {details['time']}."
+        )
+        return json.dumps({
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": mobile_number,
+            "type": "text",
+            "text": {
+                "body": confirmation_message
+            }
+        })
+
+
+bot = AppointmentBookingBot()
 
 def log_http_response(response):
     logging.info(f"Status: {response.status_code}")
@@ -32,7 +125,7 @@ def handle_message():
         response: A tuple containing a JSON response and an HTTP status code.
     """
     body = request.get_json()
-    # logging.info(f"request body: {body}")
+    logging.info(f"request body: {body}")
 
     # Check if it's a WhatsApp status update
     if (
@@ -49,17 +142,35 @@ def handle_message():
         changes = entry.get("changes", [{}])[0]
         value = changes.get("value", {})
         messages = value.get("messages", [{}])[0]
+        messages_type = messages[MessageObjects.TYPE]
+        sender_id = messages[MessageObjects.FROM]
 
-        if "interactive" in messages:
-            interactive_type = messages["interactive"]["type"]
-            if interactive_type == "button_reply":
-                button_reply = messages["interactive"]["button_reply"]
-                selected_option = button_reply["title"]
-                sender_id = messages["from"]
+        if messages_type == MessageTypes.INTERACTIVE:
+            interactive_type = messages[MessageTypes.INTERACTIVE][MessageObjects.TYPE]
+            if interactive_type == ReplyType.BUTTON_REPLY:
+                button_reply = messages[MessageTypes.INTERACTIVE][ReplyType.BUTTON_REPLY]
+                selected_option = button_reply[MessageObjects.TITLE]
+                selected_option_id = button_reply[MessageObjects.ID]
+                
+                if selected_option_id == AppointmentConstants.ID:
+                    if sender_id not in bot.user_states:
+                        bot.initialize_user(sender_id)
+                    reply_text = f"You have selected to book an appointment. Processing your request..."
+                    send_text_message(sender_id, reply_text)
+                    message = bot.get_next_message(sender_id)
+                    send_message(message)
 
-                reply_text = f"You selected: {selected_option}"
-                send_text_message(sender_id, reply_text)
+                else:
+                    reply_text = f"You selected: {selected_option}"
+                    send_text_message(sender_id, reply_text)
+
                 return jsonify({"status": "ok"}), 200
+        elif sender_id in bot.user_states:
+            print(f"user is initiated booking process")
+            response = messages["text"]["body"]
+            message = bot.get_next_message(sender_id,response)
+            send_message(message)
+            return jsonify({"status": "ok"}), 200
 
         if is_valid_whatsapp_message(body):
             process_whatsapp_message(body)
@@ -97,27 +208,21 @@ def send_text_message(recipient_id, text):
     })
     url = f"https://graph.facebook.com/{current_app.config['VERSION']}/{current_app.config['PHONE_NUMBER_ID']}/messages"
     try:
-        # response = requests.request("POST", url, headers=headers, data=data)
-        response = requests.post(
-            url, data=data, headers=headers, timeout=10
-        )  # 10 seconds timeout as an example
-        response.raise_for_status()  # Raises an HTTPError if the HTTP request returned an unsuccessful status code
+        response = requests.post(url, data=data, headers=headers, timeout=10)
+        response.raise_for_status()
     except requests.Timeout:
         logging.error("Timeout occurred while sending message")
         return jsonify({"status": "error", "message": "Request timed out"}), 408
-    except (
-        requests.RequestException
-    ) as e:  # This will catch any general request exception
+    except requests.RequestException as e:
         logging.error(f"Request failed due to: {e}")
         return jsonify({"status": "error", "message": "Failed to send message"}), 500
     else:
-        # Process the response as normal
         log_http_response(response)
         return response
 
     logging.info(f"Message sent response: {response.json()}")
 
-# Required webhook verifictaion for WhatsApp
+# Required webhook verification for WhatsApp
 def verify():
     # Parse params from the webhook verification request
     mode = request.args.get("hub.mode")
@@ -139,7 +244,6 @@ def verify():
         logging.info("MISSING_PARAMETER")
         return jsonify({"status": "error", "message": "Missing parameters"}), 400
 
-
 @webhook_blueprint.route("/webhook", methods=["GET"])
 def webhook_get():
     return verify()
@@ -148,5 +252,3 @@ def webhook_get():
 @signature_required
 def webhook_post():
     return handle_message()
-
-
