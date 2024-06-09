@@ -92,6 +92,7 @@ class AppointmentBookingBot:
             f"Thank you, {details['name']}! "
             f"Your appointment is scheduled for {details['date']} at {details['time']}."
         )
+        del self.user_states[mobile_number]
         return json.dumps({
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
