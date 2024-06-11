@@ -1,8 +1,9 @@
+import datetime
 import logging
 import json
 import requests
 from flask import Blueprint, request, jsonify, current_app
-
+from datetime import datetime, timedelta
 from .decorators.security import signature_required
 from .utils.whatsapp_utils import (
     process_whatsapp_message,
@@ -66,15 +67,49 @@ class AppointmentBookingBot:
         })
 
     def send_ask_date_message(self, mobile_number):
-        return json.dumps({
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": mobile_number,
-            "type": "text",
-            "text": {
-                "body": "Please provide your preferred date for the appointment (e.g., 2024-06-15)."
+            # Get today's date
+        today = datetime.now().date()
+        # Generate dates for the next three days
+        next_three_days = [today + timedelta(days=i) for i in range(3)]
+        # Format dates as strings
+        date_options = [date.strftime("%Y-%m-%d") for date in next_three_days]
+
+        # Create button template
+        buttons = [
+            {"type": "reply", "reply": {"id": date_option,"title": date_option}} for date_option in date_options
+        ]
+
+        # Construct the message payload with buttons
+        return json.dumps({"messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": mobile_number,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "header": {
+                "type": "text",
+                "text": "Select a Date"
+            },
+            "body": {
+                "text": "Please select an data below to book your appointment:"
+            },
+            "footer": {
+                "text": "Powered by A+ Solutions"
+            },
+            "action": {
+                "buttons": buttons
             }
+        }
         })
+        # return json.dumps({
+        #     "messaging_product": "whatsapp",
+        #     "recipient_type": "individual",
+        #     "to": mobile_number,
+        #     "type": "text",
+        #     "text": {
+        #         "body": "Please provide your preferred date for the appointment (e.g., 2024-06-15)."
+        #     }
+        # })
 
     def send_ask_time_message(self, mobile_number):
         return json.dumps({
@@ -92,15 +127,51 @@ class AppointmentBookingBot:
             f"Thank you, {details['name']}! "
             f"Your appointment is scheduled for {details['date']} at {details['time']}."
         )
-        del self.user_states[mobile_number]
+
+        upload_url = f"https://graph.facebook.com/{current_app.config['VERSION']}/{current_app.config['PHONE_NUMBER_ID']}/media"
+
+        file_path = r"C:\Users\palun\Downloads\TEST.pdf"
+        with open(file_path, 'rb') as file:
+            media = {
+                'file': ('TEST.pdf', file, 'application/pdf'),  # Use tuple to specify file name and MIME type
+                'messaging_product': (None, 'whatsapp')}
+            
+            response = requests.post(upload_url, headers={'Authorization': f'Bearer {current_app.config["ACCESS_TOKEN"]}'}, files=media)
+            print(response)
+            if response.status_code == 200:
+                media_id = response.json()['id']
+                print('Media ID:', media_id)
+                
+                # Send the message with the media attachment
+                message_url = f"https://graph.facebook.com/{current_app.config['VERSION']}/{current_app.config['PHONE_NUMBER_ID']}/messages"
+                message_data = {
+                    "messaging_product": "whatsapp",
+                    "to": mobile_number,
+                    "type": "document",
+                    "document": {
+                        "id": media_id,
+                        "caption": confirmation_message
+                    }
+                }
+
+                response = requests.post(message_url, headers={'Authorization': f'Bearer {current_app.config["ACCESS_TOKEN"]}', 'Content-Type': 'application/json'}, json=message_data)
+
+                if response.status_code == 200:
+                    print('Message sent successfully')
+                else:
+                    print('Failed to send message:', response.text)
+                    return {"error": "Failed to send message"}
+
+            else:
+                print('Failed to upload media:', response.text)
+                return {"error": "Failed to upload media"}
+
+        if mobile_number in self.user_states:
+            del self.user_states[mobile_number]
+
         return json.dumps({
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": mobile_number,
-            "type": "text",
-            "text": {
-                "body": confirmation_message
-            }
+            "status": "success",
+            "message": "Appointment confirmed and document sent"
         })
 
 
@@ -161,9 +232,9 @@ def handle_message():
                     message = bot.get_next_message(sender_id)
                     send_message(message)
 
-                else:
-                    reply_text = f"You selected: {selected_option}"
-                    send_text_message(sender_id, reply_text)
+                elif sender_id in bot.user_states:
+                     message = bot.get_next_message(sender_id,selected_option)
+                     send_message(message)
 
                 return jsonify({"status": "ok"}), 200
         elif sender_id in bot.user_states:
