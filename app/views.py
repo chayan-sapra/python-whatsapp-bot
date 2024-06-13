@@ -245,7 +245,7 @@ def handle_message():
             return jsonify({"status": "ok"}), 200
 
         if is_valid_whatsapp_message(body):
-            process_whatsapp_message(body)
+            process_whatsapp_message(body, sender_id)
             return jsonify({"status": "ok"}), 200
         else:
             # if the request is not a WhatsApp API event, return an error

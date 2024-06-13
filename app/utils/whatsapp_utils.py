@@ -77,7 +77,7 @@ def process_text_for_whatsapp(text):
     return whatsapp_style_text
 
 
-def process_whatsapp_message(body):
+def process_whatsapp_message(body, recipent_id):
     wa_id = body["entry"][0]["changes"][0]["value"]["contacts"][0]["wa_id"]
     name = body["entry"][0]["changes"][0]["value"]["contacts"][0]["profile"]["name"]
 
@@ -92,7 +92,7 @@ def process_whatsapp_message(body):
     # response = process_text_for_whatsapp(response)
 
     # data = get_text_message_input(current_app.config["RECIPIENT_WAID"], response)
-    data = get_button_message_input(current_app.config["RECIPIENT_WAID"])
+    data = get_button_message_input(recipent_id)
     print(f"data = {data}")
     send_message(data)
 
