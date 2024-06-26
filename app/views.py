@@ -42,17 +42,28 @@ class AppointmentBookingBot:
         elif step == 1:
             details["name"] = response
             user_state["step"] += 1
-            return self.send_ask_date_message(mobile_number)
+            return self.send_ask_service_message(mobile_number)
         elif step == 2:
+            details["service"] = response
+            user_state["step"] += 1
+            return self.send_ask_date_message(mobile_number)
+        elif step == 3:
             details["date"] = response
             user_state["step"] += 1
             return self.send_ask_time_message(mobile_number)
-        elif step == 3:
+        elif step == 4:
             details["time"] = response
             user_state["step"] += 1
-            return self.confirm_appointment(mobile_number, details)
+            return self.send_ask_confirmation_message(mobile_number, details)
+        elif step == 5:
+            details["confirmation"] = response
+            if response.lower() in ["yes", "confirm"]:
+                return self.confirm_appointment(mobile_number, details)
+            else:
+                user_state["step"] = 0  # Reset the process if not confirmed
+                return self.send_restart_message(mobile_number)
         else:
-            return self.confirm_appointment(mobile_number, details)
+            return self.send_restart_message(mobile_number)
 
 
     def send_ask_name_message(self, mobile_number):
@@ -101,15 +112,52 @@ class AppointmentBookingBot:
             }
         }
         })
-        # return json.dumps({
-        #     "messaging_product": "whatsapp",
-        #     "recipient_type": "individual",
-        #     "to": mobile_number,
-        #     "type": "text",
-        #     "text": {
-        #         "body": "Please provide your preferred date for the appointment (e.g., 2024-06-15)."
-        #     }
-        # })
+
+    def send_ask_service_message(self, mobile_number):
+        services = ["Consultation", "Check-up", "Follow-up"]
+        buttons = [{"type": "reply", "reply": {"id": service, "title": service}} for service in services]
+
+        return json.dumps({
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": mobile_number,
+            "type": "interactive",
+            "interactive": {
+                "type": "button",
+                "header": {
+                    "type": "text",
+                    "text": "Select a Service"
+                },
+                "body": {
+                    "text": "Please select a service for your appointment:"
+                },
+                "footer": {
+                    "text": "Powered by A+ Solutions"
+                },
+                "action": {
+                    "buttons": buttons
+                }
+            }
+        })
+
+    def send_ask_confirmation_message(self, mobile_number, details):
+        confirmation_message = (
+            f"Please confirm your appointment:\n"
+            f"Name: {details['name']}\n"
+            f"Service: {details['service']}\n"
+            f"Date: {details['date']}\n"
+            f"Time: {details['time']}\n\n"
+            "Reply with 'Yes' to confirm or 'No' to restart the process."
+        )    
+        return json.dumps({
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": mobile_number,
+            "type": "text",
+            "text": {
+                "body": confirmation_message
+            }
+        })
 
     def send_ask_time_message(self, mobile_number):
         return json.dumps({

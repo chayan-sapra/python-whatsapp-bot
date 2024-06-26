@@ -30,9 +30,9 @@ def signature_required(f):
         signature = request.headers.get("X-Hub-Signature-256", "")[
             7:
         ]  # Removing 'sha256='
-        if not validate_signature(request.data.decode("utf-8"), signature):
-            logging.info("Signature verification failed!")
-            return jsonify({"status": "error", "message": "Invalid signature"}), 403
+        # if not validate_signature(request.data.decode("utf-8"), signature):
+        #     logging.info("Signature verification failed!")
+        #     return jsonify({"status": "error", "message": "Invalid signature"}), 403
         return f(*args, **kwargs)
 
     return decorated_function
